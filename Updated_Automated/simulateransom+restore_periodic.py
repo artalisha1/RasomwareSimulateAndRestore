@@ -462,7 +462,7 @@ print("✅ Real‑time components shut down")
 
 print_current_snapshots(RESTIC_REPO)
 
-"""##FIX THIS: Optional: Prune Workspace
+"""##Optional: Prune Workspace
 * Locating the deepest nested 'victim_data' directory inside restore_root
 * Removing any '.enc' encrypted files
 * Moving the restored data to the original victim_data_path
