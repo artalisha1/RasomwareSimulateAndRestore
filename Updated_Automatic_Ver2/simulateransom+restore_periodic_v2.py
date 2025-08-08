@@ -127,35 +127,98 @@ def get_baseline_snapshot_ids(restic_repo: str) -> list[str]:
     # each snap has keys like "short_id", "time", etc.
     return [snap["short_id"] for snap in snaps]
 
-def print_changed_files(changes: list[str]) -> None:
-    """
-    Nicely print the list of changed file paths, or report none.
-    """
-    if not changes:
-        print("🔍 No changes detected.")
-    else:
-        print("🔍 Changed files:")
-        for p in changes:
-            print(f"  • {p}")
+# def print_changed_files(changes: list[str]) -> None:
+#     """
+#     Nicely print the list of changed file paths, or report none.
+#     """
+#     if not changes:
+#         print("🔍 No changes detected.")
+#     else:
+#         print("🔍 Changed files:")
+#         for p in changes:
+#             print(f"  • {p}")
 
-def get_diff_files(old_id: str, new_id: str, restic_repo: str) -> list[str]:
+def print_diff_details(diff: dict) -> None:
     """
-    Return all file paths that restic reports as added, modified, or metadata-updated
-    between two snapshots (per restic-diff manpage).
+    Pretty-print categorized diff results.
     """
-    proc = run([
-        "restic", "-r", restic_repo,
-        "diff", old_id, new_id
-    ])
-    paths: list[str] = []
-    for line in proc.stdout.splitlines():
+    blocks = [
+        ("➕ Added", diff.get("added", [])),
+        ("✏️ Modified", diff.get("modified", [])),
+        ("🗑️ Removed", diff.get("removed", [])),
+        ("🧾 Metadata-only", diff.get("meta", [])),
+    ]
+    any_printed = False
+    for title, items in blocks:
+        if items:
+            any_printed = True
+            print(title + ":")
+            for p in items:
+                print(f"  • {p}")
+    if not any_printed:
+        print("🔍 No changes detected.")
+
+import re
+# def get_diff_files(old_id: str, new_id: str, restic_repo: str) -> list[str]:
+#     """
+#     Return all file paths that restic reports as added, modified, or metadata-updated
+#     between two snapshots (per restic-diff manpage).
+#     """
+#     proc = run([
+#         "restic", "-r", restic_repo,
+#         "diff", old_id, new_id
+#     ])
+#     paths: list[str] = []
+#     for line in proc.stdout.splitlines():
+#         if not line:
+#             continue
+#         status, path = line.split(" ", 1)
+#         # + = added, M = modified, U = metadata updated :contentReference[oaicite:0]{index=0}
+#         if status in ("+", "M", "U"):
+#             paths.append(path)
+#     return paths
+def get_diff_details(old_id: str, new_id: str, restic_repo: str) -> dict:
+    """
+    Parse `restic diff old new` and return categorized path lists.
+    Supports both 'A/M/R/U path' and '+/- path' formats.
+    """
+    proc = run(["restic", "-r", restic_repo, "diff", old_id, new_id])
+
+    added, modified, removed, meta = [], [], [], []
+
+    for raw in proc.stdout.splitlines():
+        line = raw.strip()
         if not line:
             continue
-        status, path = line.split(" ", 1)
-        # + = added, M = modified, U = metadata updated :contentReference[oaicite:0]{index=0}
-        if status in ("+", "M", "U"):
-            paths.append(path)
-    return paths
+        # Skip headers/summaries
+        if ":" in line and line.split(":", 1)[0].lower() in {
+            "comparing", "files", "dirs", "added files", "removed files",
+            "modified files", "added dirs", "removed dirs", "modified dirs"
+        }:
+            continue
+
+        # Format 1: "A path", "M path", "R path", "U path"
+        m = re.match(r"^([AMRU])\s+(.+)$", line)
+        if m:
+            code, path = m.group(1), m.group(2)
+            if code == "A": added.append(path)
+            elif code == "M": modified.append(path)
+            elif code == "R": removed.append(path)
+            elif code == "U": meta.append(path)
+            continue
+
+        # Format 2: "+ path" (added), "- path" (removed)
+        m = re.match(r"^([+\-])\s+(.+)$", line)
+        if m:
+            code, path = m.group(1), m.group(2)
+            if code == "+": added.append(path)
+            elif code == "-": removed.append(path)
+            continue
+
+        # If we reach here it's an unrecognized line; ignore
+        # print("DEBUG unparsed diff line:", line)
+
+    return {"added": added, "modified": modified, "removed": removed, "meta": meta}
 
 def ensure_baseline_snapshot(data_dir: str, restic_repo: str) -> None:
     """
@@ -197,14 +260,17 @@ def ensure_baseline_snapshot(data_dir: str, restic_repo: str) -> None:
         raise RuntimeError("Could not find summary in restic JSON output")
 
     # 3) Diff old→new to get the **true** list of changed files
-    changed = get_diff_files(old_id, new_id, restic_repo)
-    if not changed:
+    # changed = get_diff_files(old_id, new_id, restic_repo)
+    # if not changed:
+    diff = get_diff_details(old_id, new_id, restic_repo)
+    changed_count = sum(len(v) for v in diff.values())
+    if changed_count == 0:
         print(f"⚠️ No real file-tree changes; forgetting baseline {new_id}")
         run(["restic", "-r", restic_repo, "forget", new_id, "--prune"])
         print("✅ Skipped baseline (no real changes).")
     else:
-        print(f"✅ New baseline kept: {new_id} ({len(changed)} paths changed)")
-        print_changed_files(changed)
+        print(f"✅ Real changes detected ({changed_count} paths); keeping {new_id}")
+        print_diff_details(diff)
 
 """##Step 6: Define Periodic Baseline Scheduler"""
 
@@ -340,16 +406,45 @@ print_current_snapshots(RESTIC_REPO)
 """##Step 8: Create a Unique Text File to Validate the Accuracy of Baseline Function"""
 
 # 1. Show current baselines
-print("▶️ Before:")
+print("▶️ Before Adding File:")
 print_current_snapshots(RESTIC_REPO)
 
 # 2. Create a dummy change
-with open(f"{DATA_DIR}/verify_{int(time.time())}.txt","w") as f:
+new_file = os.path.join(DATA_DIR, f"verify_{int(time.time())}.txt")
+with open(new_file, "w") as f:
     f.write("trigger baseline\n")
+
+print(f"📝 Created: {new_file}")
+
+# Commented out IPython magic to ensure Python compatibility.
+# %%bash
+# VICTIM_PATH="/content/drive/MyDrive/ransomware_lab/victim_data"
+# tree -h "$VICTIM_PATH"
 
 time.sleep(15)
 # 3. Show baselines again
-print("▶️ After:")
+print("▶️ After Adding File and Before Deleting File:")
+print_current_snapshots(RESTIC_REPO)
+
+import os, glob, json, time
+matches = glob.glob(os.path.join(DATA_DIR, "verify_*.txt"))
+if not matches:
+    print("❌ No verify_*.txt found. Create one first, then rerun.")
+else:
+  target = max(matches, key=os.path.getmtime)
+  rel = os.path.relpath(target, DATA_DIR)
+  print(f"🗂️ Target file to delete: {rel}")
+  #Delete the file
+  os.remove(target)
+  print(f"🗑️ Deleted: {rel}")
+
+# Commented out IPython magic to ensure Python compatibility.
+# %%bash
+# VICTIM_PATH="/content/drive/MyDrive/ransomware_lab/victim_data"
+# tree -h "$VICTIM_PATH"
+
+time.sleep(15)
+print("▶️ After Deleting File:")
 print_current_snapshots(RESTIC_REPO)
 
 """##Step 9: Simulate Ransomware attack
