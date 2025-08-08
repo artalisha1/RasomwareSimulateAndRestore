@@ -127,17 +127,6 @@ def get_baseline_snapshot_ids(restic_repo: str) -> list[str]:
     # each snap has keys like "short_id", "time", etc.
     return [snap["short_id"] for snap in snaps]
 
-# def print_changed_files(changes: list[str]) -> None:
-#     """
-#     Nicely print the list of changed file paths, or report none.
-#     """
-#     if not changes:
-#         print("🔍 No changes detected.")
-#     else:
-#         print("🔍 Changed files:")
-#         for p in changes:
-#             print(f"  • {p}")
-
 def print_diff_details(diff: dict) -> None:
     """
     Pretty-print categorized diff results.
@@ -158,25 +147,6 @@ def print_diff_details(diff: dict) -> None:
     if not any_printed:
         print("🔍 No changes detected.")
 
-import re
-# def get_diff_files(old_id: str, new_id: str, restic_repo: str) -> list[str]:
-#     """
-#     Return all file paths that restic reports as added, modified, or metadata-updated
-#     between two snapshots (per restic-diff manpage).
-#     """
-#     proc = run([
-#         "restic", "-r", restic_repo,
-#         "diff", old_id, new_id
-#     ])
-#     paths: list[str] = []
-#     for line in proc.stdout.splitlines():
-#         if not line:
-#             continue
-#         status, path = line.split(" ", 1)
-#         # + = added, M = modified, U = metadata updated :contentReference[oaicite:0]{index=0}
-#         if status in ("+", "M", "U"):
-#             paths.append(path)
-#     return paths
 def get_diff_details(old_id: str, new_id: str, restic_repo: str) -> dict:
     """
     Parse `restic diff old new` and return categorized path lists.
@@ -277,22 +247,26 @@ def ensure_baseline_snapshot(data_dir: str, restic_repo: str) -> None:
 import threading
 import time
 
-def start_periodic_baseline(data_dir: str, restic_repo: str, interval: int = 30):
+def start_periodic_baseline(data_dir: str, restic_repo: str, interval: int):
     """
     Spawns a background thread that re-tags the latest state as a new baseline
     every `interval` seconds by calling ensure_baseline_snapshot().
     """
+    stop_event = threading.Event()
     def loop():
         while True:
             ensure_baseline_snapshot(data_dir, restic_repo)
-            time.sleep(interval)
+            # time.sleep(interval)
+            stop_event.wait(interval)
 
     t = threading.Thread(target=loop, daemon=True)
     t.start()
     print()
     print(f"🕒 Started periodic baseline thread (every {interval}s)")
+    return stop_event, t
 
-start_periodic_baseline(DATA_DIR, RESTIC_REPO, interval=30)
+# start_periodic_baseline(DATA_DIR, RESTIC_REPO, interval=15)
+stop_ev, thread = start_periodic_baseline(DATA_DIR, RESTIC_REPO, interval=15)
 time.sleep(5)
 
 """##Step 7: Define Helper to Restore Latest Baseline Snapshot that is Readable"""
@@ -423,7 +397,7 @@ print(f"📝 Created: {new_file}")
 
 time.sleep(15)
 # 3. Show baselines again
-print("▶️ After Adding File and Before Deleting File:")
+print("▶️ After Adding File:")
 print_current_snapshots(RESTIC_REPO)
 
 import os, glob, json, time
@@ -484,6 +458,7 @@ def mark_attack_snapshot(data_dir: str, restic_repo: str):
 ##mark the attack in Restic
 mark_attack_snapshot(DATA_DIR, RESTIC_REPO)
 
+time.sleep(15)
 print_current_snapshots(RESTIC_REPO)
 
 """##Step 10: Attempt to Read
@@ -665,3 +640,13 @@ if success:
 # echo
 # 
 # tree -h "$RESTORE_PATH"
+
+time.sleep(15)
+print_current_snapshots(RESTIC_REPO)
+
+import threading
+import time
+
+stop_ev.set()
+thread.join(timeout=5)
+print("🛑 Periodic baseline stopped.")
