@@ -147,6 +147,7 @@ def print_diff_details(diff: dict) -> None:
     if not any_printed:
         print("🔍 No changes detected.")
 
+import re
 def get_diff_details(old_id: str, new_id: str, restic_repo: str) -> dict:
     """
     Parse `restic diff old new` and return categorized path lists.
@@ -370,11 +371,11 @@ def restore_latest_clean_baseline(restic_repo: str, restore_dir: str):
     finally:
         shutil.rmtree(tmp_root)
 
-"""##Step 8: 30 Seconds Pause"""
+"""##Step 8: 15 Seconds Pause"""
 
 import time, subprocess, os
-print("⌛ Sleeping 30 s so real‑time activity accumulates …")
-time.sleep(30)
+print("⌛ Sleeping 15s so real‑time activity accumulates …")
+time.sleep(15)
 print_current_snapshots(RESTIC_REPO)
 
 """##Step 8: Create a Unique Text File to Validate the Accuracy of Baseline Function"""
@@ -395,7 +396,7 @@ print(f"📝 Created: {new_file}")
 # VICTIM_PATH="/content/drive/MyDrive/ransomware_lab/victim_data"
 # tree -h "$VICTIM_PATH"
 
-time.sleep(15)
+time.sleep(10)
 # 3. Show baselines again
 print("▶️ After Adding File:")
 print_current_snapshots(RESTIC_REPO)
@@ -417,7 +418,7 @@ else:
 # VICTIM_PATH="/content/drive/MyDrive/ransomware_lab/victim_data"
 # tree -h "$VICTIM_PATH"
 
-time.sleep(15)
+time.sleep(10)
 print("▶️ After Deleting File:")
 print_current_snapshots(RESTIC_REPO)
 
@@ -458,7 +459,7 @@ def mark_attack_snapshot(data_dir: str, restic_repo: str):
 ##mark the attack in Restic
 mark_attack_snapshot(DATA_DIR, RESTIC_REPO)
 
-time.sleep(15)
+time.sleep(10)
 print_current_snapshots(RESTIC_REPO)
 
 """##Step 10: Attempt to Read
@@ -641,7 +642,7 @@ if success:
 # 
 # tree -h "$RESTORE_PATH"
 
-time.sleep(15)
+time.sleep(10)
 print_current_snapshots(RESTIC_REPO)
 
 import threading
