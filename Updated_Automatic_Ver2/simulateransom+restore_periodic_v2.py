@@ -378,7 +378,11 @@ print("⌛ Sleeping 15s so real‑time activity accumulates …")
 time.sleep(15)
 print_current_snapshots(RESTIC_REPO)
 
-"""##Step 8: Create a Unique Text File to Validate the Accuracy of Baseline Function"""
+"""##Step 9: Validate the Accuracy of Baseline Function
+Create a File, check baseline snapshots
+
+Delete the File, check baseline snapshots
+"""
 
 # 1. Show current baselines
 print("▶️ Before Adding File:")
@@ -402,6 +406,7 @@ print("▶️ After Adding File:")
 print_current_snapshots(RESTIC_REPO)
 
 import os, glob, json, time
+# 4. Find and Delete the text file
 matches = glob.glob(os.path.join(DATA_DIR, "verify_*.txt"))
 if not matches:
     print("❌ No verify_*.txt found. Create one first, then rerun.")
@@ -419,10 +424,11 @@ else:
 # tree -h "$VICTIM_PATH"
 
 time.sleep(10)
+# 5. Show baselines again
 print("▶️ After Deleting File:")
 print_current_snapshots(RESTIC_REPO)
 
-"""##Step 9: Simulate Ransomware attack
+"""##Step 10: Simulate Ransomware attack
 
 ###Define Helper to Mark Simulated Ransomware Attack in Snapshots
 """
@@ -462,7 +468,7 @@ mark_attack_snapshot(DATA_DIR, RESTIC_REPO)
 time.sleep(10)
 print_current_snapshots(RESTIC_REPO)
 
-"""##Step 10: Attempt to Read
+"""##Step 11: Attempt to Read
 Will fail
 """
 
@@ -477,14 +483,14 @@ try:
 except (FileNotFoundError, PermissionError):
     print("✅  Expected failure: plaintext is gone or unreadable — ransomware succeeded.")
 
-"""##Step 11: Restore the Latest Clean Snapshot"""
+"""##Step 12: Restore the Latest Clean Snapshot"""
 
 #List all snapshots
 print_current_snapshots(RESTIC_REPO)
 
 success, restored_id = restore_latest_clean_baseline(RESTIC_REPO, RESTORE_DIR)
 
-"""##Step 12: Verify Restored File Exists and Matches Expected Content"""
+"""##Step 13: Verify Restored File Exists and Matches Expected Content"""
 
 # Commented out IPython magic to ensure Python compatibility.
 # %%bash
@@ -526,7 +532,7 @@ assert "Quarterly revenue: $123,456" in content, "Content mismatch!"
 sha = hashlib.sha256(file.read_bytes()).hexdigest()
 print(f"✅  report_Q1.txt verified — SHA‑256: {sha[:12]}…")
 
-"""##Step 13: Compare Original to Restored
+"""##Step 14: Compare Original to Restored
 Sanity Check
 """
 
@@ -644,6 +650,8 @@ if success:
 
 time.sleep(10)
 print_current_snapshots(RESTIC_REPO)
+
+"""##Step 15: Stop Periodic Baseline"""
 
 import threading
 import time
